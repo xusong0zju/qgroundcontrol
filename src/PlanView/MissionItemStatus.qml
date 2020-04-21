@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -20,19 +20,20 @@ import QGroundControl.FactControls  1.0
 
 Rectangle {
     id:         root
-    height:     ScreenTools.defaultFontPixelHeight * 7
     radius:     ScreenTools.defaultFontPixelWidth * 0.5
     color:      qgcPal.window
     opacity:    0.80
     clip:       true
 
-    property var missionItems                ///< List of all available mission items
+    property var    missionItems                    ///< List of all available mission items
+    property real   maxWidth:          parent.width
 
-    property real maxWidth:          parent.width
+    signal setCurrentSeqNum(int seqNum)
+
     readonly property real _margins: ScreenTools.defaultFontPixelWidth
 
     onMaxWidthChanged: {
-        var calcLength = (statusListView.count + 1)*statusListView.contentItem.children[0].width
+        var calcLength = (statusListView.count + 1) * (statusListView.count ? statusListView.contentItem.children[0].width : 1)
         root.width = root.maxWidth > calcLength ? calcLength : root.maxWidth
     }
 
@@ -61,10 +62,10 @@ Rectangle {
         orientation:            ListView.Horizontal
         spacing:                0
         clip:                   true
-        currentIndex:           _currentMissionIndex
+        currentIndex:           _missionController.currentPlanViewSeqNum
 
         onCountChanged: {
-            var calcLength = (statusListView.count + 1)*statusListView.contentItem.children[0].width
+            var calcLength = (statusListView.count + 1) * (statusListView.count ? statusListView.contentItem.children[0].width : 1)
             root.width = root.maxWidth > calcLength ? calcLength : root.maxWidth
         }
 
@@ -73,9 +74,10 @@ Rectangle {
             width:      display ? (indicator.width + spacing)  : 0
             visible:    display
 
-            property real availableHeight:  height - indicator.height
-            property bool showTerrain:      !isNaN(object.terrainPercent)
-            property real _terrainPercent:  showTerrain ? object.terrainPercent : 0
+            property real availableHeight:      height - indicator.height
+            property bool _coordValid:          object.coordinate.isValid
+            property bool _terrainAvailable:    !isNaN(object.terrainPercent)
+            property real _terrainPercent:      _terrainAvailable ? object.terrainPercent : 1
 
             readonly property bool display: object.specifiesCoordinate && !object.isStandaloneCoordinate
             readonly property real spacing: ScreenTools.defaultFontPixelWidth * ScreenTools.smallFontPointRatio
@@ -84,9 +86,9 @@ Rectangle {
                 anchors.bottom:             parent.bottom
                 anchors.horizontalCenter:   parent.horizontalCenter
                 width:                      indicator.width
-                height:                     Math.max(availableHeight * _terrainPercent, 1)
-                color:                      _terrainPercent > object.altPercent ? "red": qgcPal.text
-                visible:                    !isNaN(object.terrainPercent)
+                height:                     _terrainAvailable ? Math.max(availableHeight * _terrainPercent, 1) : parent.height
+                color:                      _terrainAvailable ? (object.terrainCollision ? "red": qgcPal.text) : "yellow"
+                visible:                    _coordValid
             }
 
             MissionItemIndexLabel {
@@ -97,10 +99,32 @@ Rectangle {
                 checked:                    object.isCurrentItem
                 label:                      object.abbreviation.charAt(0)
                 index:                      object.abbreviation.charAt(0) > 'A' && object.abbreviation.charAt(0) < 'z' ? -1 : object.sequenceNumber
-                visible:                    true
+                showSequenceNumbers:        false
+            }
+
+            Rectangle {
+                id:                     indexBackground
+                anchors.leftMargin:     -2
+                anchors.rightMargin:    -2
+                anchors.fill:           indexLabel
+                color:                  qgcPal.window
+                opacity:                0.3
+                visible:                indexLabel.visible
+                transform:              Rotation { angle: 90; origin.x: indexBackground.width / 2; origin.y: indexBackground.height / 2 }
+            }
+
+            QGCLabel {
+                id:                 indexLabel
+                anchors.centerIn:   parent
+                text:               object.sequenceNumber
+                visible:            indicator.index != -1
+                transform:          Rotation { angle: 90; origin.x: indexLabel.width / 2; origin.y: indexLabel.height / 2 }
+            }
+
+            MouseArea {
+                anchors.fill:   parent
+                onClicked:      root.setCurrentSeqNum(object.sequenceNumber)
             }
         }
     }
 }
-
-

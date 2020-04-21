@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -12,7 +12,6 @@
 #include "Vehicle.h"
 #include "FirmwarePluginManager.h"
 #include "QGCApplication.h"
-#include "QGroundControlQmlGlobal.h"
 #include "JsonHelper.h"
 #include "MissionCommandUIInfo.h"
 
@@ -71,7 +70,7 @@ void MissionCommandList::_loadMavCmdInfoJson(const QString& jsonFilename, bool b
 
     // Iterate over MissionCommandUIInfo objects
     QJsonArray jsonArray = jsonValue.toArray();
-    foreach(QJsonValue info, jsonArray) {
+    for(QJsonValue info: jsonArray) {
         if (!info.isObject()) {
             qWarning() << jsonFilename << "mavCmdArray should contain objects";
             return;
@@ -96,7 +95,7 @@ void MissionCommandList::_loadMavCmdInfoJson(const QString& jsonFilename, bool b
     }
 
     // Build id list
-    foreach (MAV_CMD id, _infoMap.keys()) {
+    for (MAV_CMD id: _infoMap.keys()) {
         _ids << id;
     }
 }
@@ -104,7 +103,7 @@ void MissionCommandList::_loadMavCmdInfoJson(const QString& jsonFilename, bool b
 MissionCommandUIInfo* MissionCommandList::getUIInfo(MAV_CMD command) const
 {
     if (!_infoMap.contains(command)) {
-        return NULL;
+        return nullptr;
     }
 
     return _infoMap[command];

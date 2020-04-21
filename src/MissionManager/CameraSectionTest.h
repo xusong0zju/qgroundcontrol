@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -11,6 +11,7 @@
 
 #include "SectionTest.h"
 #include "CameraSection.h"
+#include "PlanMasterController.h"
 
 /// Unit test for CameraSection
 class CameraSectionTest : public SectionTest
@@ -23,21 +24,26 @@ public:
     void init(void) override;
     void cleanup(void) override;
 
+    static SimpleMissionItem* createValidStopVideoItem   (PlanMasterController* masterController, QObject* parent);
+    static SimpleMissionItem* createValidStopDistanceItem(PlanMasterController* masterController, QObject* parent);
+    static SimpleMissionItem* createValidStopTimeItem    (PlanMasterController* masterController, QObject* parent);
+
 private slots:
-    void _testDirty(void);
-    void _testSettingsAvailable(void);
-    void _checkAvailable(void);
-    void _testItemCount(void);
-    void _testAppendSectionItems(void);
-    void _testScanForGimbalSection(void);
-    void _testScanForPhotoIntervalTimeSection(void);
-    void _testScanForPhotoIntervalDistanceSection(void);
-    void _testScanForStartVideoSection(void);
-    void _testScanForStopVideoSection(void);
-    void _testScanForStopImageSection(void);
-    void _testScanForCameraModeSection(void);
-    void _testScanForTakePhotoSection(void);
-    void _testScanForMultipleItems(void);
+    void _testDirty                                 (void);
+    void _testSettingsAvailable                     (void);
+    void _checkAvailable                            (void);
+    void _testItemCount                             (void);
+    void _testAppendSectionItems                    (void);
+    void _testScanForGimbalSection                  (void);
+    void _testScanForPhotoIntervalTimeSection       (void);
+    void _testScanForPhotoIntervalDistanceSection   (void);
+    void _testScanForStartVideoSection              (void);
+    void _testScanForStopVideoSection               (void);
+    void _testScanForStopPhotoSection               (void);
+    void _testScanForCameraModeSection              (void);
+    void _testScanForTakePhotoSection               (void);
+    void _testScanForMultipleItems                  (void);
+    void _testSpecifiedGimbalValuesChanged          (void);
 
 private:
     void _createSpy(CameraSection* cameraSection, MultiSignalSpy** cameraSpy);
@@ -47,14 +53,16 @@ private:
     enum {
         specifyGimbalChangedIndex = 0,
         specifiedGimbalYawChangedIndex,
+        specifiedGimbalPitchChangedIndex,
         specifyCameraModeChangedIndex,
         maxSignalIndex,
     };
 
     enum {
-        specifyGimbalChangedMask =      1 << specifyGimbalChangedIndex,
-        specifiedGimbalYawChangedMask = 1 << specifiedGimbalYawChangedIndex,
-        specifyCameraModeChangedMask =  1 << specifyCameraModeChangedIndex,
+        specifyGimbalChangedMask =          1 << specifyGimbalChangedIndex,
+        specifiedGimbalYawChangedMask =     1 << specifiedGimbalYawChangedIndex,
+        specifiedGimbalPitchChangedMask =   1 << specifiedGimbalPitchChangedIndex,
+        specifyCameraModeChangedMask =      1 << specifyCameraModeChangedIndex,
     };
 
     static const size_t cCameraSignals = maxSignalIndex;

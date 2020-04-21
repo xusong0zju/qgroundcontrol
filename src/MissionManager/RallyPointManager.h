@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -14,8 +14,10 @@
 #include <QGeoCoordinate>
 
 #include "QGCLoggingCategory.h"
+#include "PlanManager.h"
 
 class Vehicle;
+class PlanManager;
 
 Q_DECLARE_LOGGING_CATEGORY(RallyPointManagerLog)
 
@@ -60,17 +62,23 @@ public:
     } ErrorCode_t;
     
 signals:
-    void loadComplete       (const QList<QGeoCoordinate> rgPoints);
+    void loadComplete       (void);
     void inProgressChanged  (bool inProgress);
     void error              (int errorCode, const QString& errorMsg);
     void removeAllComplete  (bool error);
     void sendComplete       (bool error);
 
+private slots:
+    void _sendComplete              (bool error);
+    void _planManagerLoadComplete   (bool removeAllRequested);
+
 protected:
     void _sendError(ErrorCode_t errorCode, const QString& errorMsg);
 
     Vehicle*                _vehicle;
+    PlanManager             _planManager;
     QList<QGeoCoordinate>   _rgPoints;
+    QList<QGeoCoordinate>   _rgSendPoints;
 };
 
 #endif

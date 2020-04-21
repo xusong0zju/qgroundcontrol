@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -22,9 +22,10 @@
 QGC_LOGGING_CATEGORY(MissionManagerLog, "MissionManagerLog")
 
 MissionManager::MissionManager(Vehicle* vehicle)
-    : PlanManager(vehicle, MAV_MISSION_TYPE_MISSION)
+    : PlanManager               (vehicle, MAV_MISSION_TYPE_MISSION)
+    , _cachedLastCurrentIndex   (-1)
 {
-
+    connect(_vehicle, &Vehicle::mavlinkMessageReceived, this, &MissionManager::_mavlinkMessageReceived);
 }
 
 MissionManager::~MissionManager()
@@ -40,10 +41,12 @@ void MissionManager::writeArduPilotGuidedMissionItem(const QGeoCoordinate& gotoC
 
     _transactionInProgress = TransactionWrite;
 
+    _connectToMavlink();
+
     mavlink_message_t       messageOut;
     mavlink_mission_item_t  missionItem;
 
-    memset(&missionItem, 8, sizeof(missionItem));
+    memset(&missionItem, 0, sizeof(missionItem));
     missionItem.target_system =     _vehicle->id();
     missionItem.target_component =  _vehicle->defaultComponentId();
     missionItem.seq =               0;
@@ -85,7 +88,7 @@ void MissionManager::generateResumeMission(int resumeIndex)
     for (int i=0; i<_missionItems.count(); i++) {
         MissionItem* item = _missionItems[i];
         if (item->command() == MAV_CMD_DO_JUMP) {
-            qgcApp()->showMessage(tr("Unable to generate resume mission due to MAV_CMD_DO_JUMP command."));
+            qgcApp()->showAppMessage(tr("Unable to generate resume mission due to MAV_CMD_DO_JUMP command."));
             return;
         }
     }
@@ -211,9 +214,55 @@ void MissionManager::generateResumeMission(int resumeIndex)
     }
     _resumeMission = true;
     _writeMissionItemsWorker();
+}
 
-    // Clean up no longer needed resume items
-    for (int i=0; i<resumeMission.count(); i++) {
-        resumeMission[i]->deleteLater();
+/// Called when a new mavlink message for out vehicle is received
+void MissionManager::_mavlinkMessageReceived(const mavlink_message_t& message)
+{
+    switch (message.msgid) {
+    case MAVLINK_MSG_ID_MISSION_CURRENT:
+        _handleMissionCurrent(message);
+        break;
+
+    case MAVLINK_MSG_ID_HEARTBEAT:
+        _handleHeartbeat(message);
+        break;
     }
 }
+
+void MissionManager::_handleMissionCurrent(const mavlink_message_t& message)
+{
+    mavlink_mission_current_t missionCurrent;
+
+    mavlink_msg_mission_current_decode(&message, &missionCurrent);
+
+    if (missionCurrent.seq != _currentMissionIndex) {
+        qCDebug(MissionManagerLog) << "_handleMissionCurrent currentIndex:" << missionCurrent.seq;
+        _currentMissionIndex = missionCurrent.seq;
+        emit currentIndexChanged(_currentMissionIndex);
+    }
+
+    if (_currentMissionIndex != _lastCurrentIndex && _cachedLastCurrentIndex != _currentMissionIndex) {
+        // We have to be careful of an RTL sequence causing a change of index to the DO_LAND_START sequence. This also triggers
+        // a flight mode change away from mission flight mode. So we only update _lastCurrentIndex when the flight mode is mission.
+        // But we can run into problems where we may get the MISSION_CURRENT message for the RTL/DO_LAND_START sequenc change prior
+        // to the HEARTBEAT message which contains the flight mode change which will cause things to work incorrectly. To fix this
+        // We force the sequencing of HEARTBEAT following by MISSION_CURRENT by caching the possible _lastCurrentIndex update until
+        // the next HEARTBEAT comes through.
+        qCDebug(MissionManagerLog) << "_handleMissionCurrent caching _lastCurrentIndex for possible update:" << _currentMissionIndex;
+        _cachedLastCurrentIndex = _currentMissionIndex;
+    }
+}
+
+void MissionManager::_handleHeartbeat(const mavlink_message_t& message)
+{
+    Q_UNUSED(message);
+
+    if (_cachedLastCurrentIndex != -1 &&  _vehicle->flightMode() == _vehicle->missionFlightMode()) {
+        qCDebug(MissionManagerLog) << "_handleHeartbeat updating lastCurrentIndex from cached value:" << _cachedLastCurrentIndex;
+        _lastCurrentIndex = _cachedLastCurrentIndex;
+        _cachedLastCurrentIndex = -1;
+        emit lastCurrentIndexChanged(_lastCurrentIndex);
+    }
+}
+

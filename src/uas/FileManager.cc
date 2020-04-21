@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -11,7 +11,6 @@
 #include "FileManager.h"
 #include "QGC.h"
 #include "MAVLinkProtocol.h"
-#include "MainWindow.h"
 #include "Vehicle.h"
 #include "QGCApplication.h"
 
@@ -25,7 +24,7 @@ FileManager::FileManager(QObject* parent, Vehicle* vehicle)
     : QObject(parent)
     , _currentOperation(kCOIdle)
     , _vehicle(vehicle)
-    , _dedicatedLink(NULL)
+    , _dedicatedLink(nullptr)
     , _activeSession(0)
     , _missingDownloadedBytes(0)
     , _downloadingMissingParts(false)

@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -22,57 +22,128 @@ import QGroundControl.FlightMap     1.0
 Item {
     id: _root
 
-    property var    mapControl                                  ///< Map control to place item in
-    property var    mapCircle                                   ///< QGCMapCircle object
-    property bool   interactive:        mapCircle.interactive   /// true: user can manipulate polygon
+    property var    mapControl                                                  ///< Map control to place item in
+    property var    mapCircle                                                   ///< QGCMapCircle object
+    property bool   interactive:        mapCircle ? mapCircle.interactive : 0   /// true: user can manipulate polygon
     property color  interiorColor:      "transparent"
     property real   interiorOpacity:    1
-    property int    borderWidth:        0
-    property color  borderColor:        "black"
+    property int    borderWidth:        2
+    property color  borderColor:        "orange"
 
-    property var _circleComponent
-    property var _centerDragHandleComponent
+    property var    _circleComponent
+    property var    _topRotationIndicatorComponent
+    property var    _bottomRotationIndicatorComponent
+    property var    _dragHandlesComponent
+    property real   _radius:            mapCircle ? mapCircle.radius.rawValue : 0
 
     function addVisuals() {
-        _circleComponent = circleComponent.createObject(mapControl)
-        mapControl.addMapItem(_circleComponent)
+        if (!_circleComponent) {
+            _circleComponent = circleComponent.createObject(mapControl)
+            mapControl.addMapItem(_circleComponent)
+        }
+        if (!_topRotationIndicatorComponent) {
+            _topRotationIndicatorComponent = rotationIndicatorComponent.createObject(mapControl, { "topIndicator": true })
+            _bottomRotationIndicatorComponent = rotationIndicatorComponent.createObject(mapControl, { "topIndicator": false })
+            mapControl.addMapItem(_topRotationIndicatorComponent)
+            mapControl.addMapItem(_bottomRotationIndicatorComponent)
+        }
     }
 
     function removeVisuals() {
-        _circleComponent.destroy()
-    }
-
-    function addHandles() {
-        if (!_centerDragHandleComponent) {
-            _centerDragHandleComponent = centerDragHandleComponent.createObject(mapControl)
+        if (_circleComponent) {
+            _circleComponent.destroy()
+            _circleComponent = undefined
+        }
+        if (_topRotationIndicatorComponent) {
+            _topRotationIndicatorComponent.destroy()
+            _bottomRotationIndicatorComponent.destroy()
+            _topRotationIndicatorComponent = undefined
+            _bottomRotationIndicatorComponent = undefined
         }
     }
 
-    function removeHandles() {
-        if (_centerDragHandleComponent) {
-            _centerDragHandleComponent.destroy()
-            _centerDragHandleComponent = undefined
+    function addDragHandles() {
+        if (!_dragHandlesComponent) {
+            _dragHandlesComponent = dragHandlesComponent.createObject(mapControl)
         }
     }
 
-    onInteractiveChanged: {
-        if (interactive) {
-            addHandles()
+    function removeDragHandles() {
+        if (_dragHandlesComponent) {
+            _dragHandlesComponent.destroy()
+            _dragHandlesComponent = undefined
+        }
+    }
+
+    function updateInternalComponents() {
+        if (visible) {
+            addVisuals()
+            if (interactive) {
+                addDragHandles()
+            } else {
+                removeDragHandles()
+            }
         } else {
-            removeHandles()
+            removeVisuals()
+            removeDragHandles()
         }
     }
 
     Component.onCompleted: {
-        addVisuals()
-        if (interactive) {
-            addHandles()
-        }
+        updateInternalComponents()
     }
 
     Component.onDestruction: {
         removeVisuals()
-        removeHandles()
+        removeDragHandles()
+    }
+
+    onInteractiveChanged:   updateInternalComponents()
+    onVisibleChanged:       updateInternalComponents()
+
+    Component {
+        id: rotationIndicatorComponent
+
+        MapQuickItem {
+            visible: mapCircle.showRotation
+
+            property bool topIndicator: true
+
+            property real _rotationRadius: _radius
+
+            function updateCoordinate() {
+                coordinate = mapCircle.center.atDistanceAndAzimuth(_radius, topIndicator ? 0 : 180)
+            }
+
+            Component.onCompleted: updateCoordinate()
+
+            on_RotationRadiusChanged: updateCoordinate()
+
+            Connections {
+                target:             mapCircle
+                onCenterChanged:    updateCoordinate()
+            }
+
+            sourceItem: QGCColoredImage {
+                anchors.centerIn:   parent
+                width:              ScreenTools.defaultFontPixelHeight * 0.66
+                height:             ScreenTools.defaultFontPixelHeight
+                source:             "/qmlimages/arrow-down.png"
+                color:              borderColor
+
+                transform: Rotation {
+                    origin.x:   width / 2
+                    origin.y:   height / 2
+                    angle:      (mapCircle.clockwiseRotation ? 1 : -1) * (topIndicator ? -90 : 90)
+                }
+
+                QGCMouseArea {
+                    fillItem:   parent
+                    onClicked:  mapCircle.clockwiseRotation = !mapCircle.clockwiseRotation
+                    visible:    mapCircle.interactive
+                }
+            }
+        }
     }
 
     Component {
@@ -84,7 +155,7 @@ Item {
             border.color:   borderColor
             border.width:   borderWidth
             center:         mapCircle.center
-            radius:         mapCircle.radius.rawValue
+            radius:         _radius
         }
     }
 
@@ -112,27 +183,58 @@ Item {
         id: centerDragAreaComponent
 
         MissionItemIndicatorDrag {
-            onItemCoordinateChanged:    mapCircle.center = itemCoordinate
+            mapControl: _root.mapControl
+
+            onItemCoordinateChanged: mapCircle.center = itemCoordinate
         }
     }
 
     Component {
-        id: centerDragHandleComponent
+        id: radiusDragAreaComponent
+
+        MissionItemIndicatorDrag {
+            mapControl: _root.mapControl
+
+            onItemCoordinateChanged: mapCircle.radius.rawValue = mapCircle.center.distanceTo(itemCoordinate)
+        }
+    }
+
+    Component {
+        id: dragHandlesComponent
 
         Item {
-            property var dragHandle
-            property var dragArea
+            property var centerDragHandle
+            property var centerDragArea
+            property var radiusDragHandle
+            property var radiusDragArea
+            property var radiusDragCoord:       QtPositioning.coordinate()
+            property var circleCenterCoord:     mapCircle.center
+            property real circleRadius:         _radius
+
+            function calcRadiusDragCoord() {
+                radiusDragCoord = mapCircle.center.atDistanceAndAzimuth(circleRadius, 90)
+            }
+
+            onCircleCenterCoordChanged: calcRadiusDragCoord()
+            onCircleRadiusChanged:      calcRadiusDragCoord()
 
             Component.onCompleted: {
-                dragHandle = dragHandleComponent.createObject(mapControl)
-                dragHandle.coordinate = Qt.binding(function() { return mapCircle.center })
-                mapControl.addMapItem(dragHandle)
-                dragArea = centerDragAreaComponent.createObject(mapControl, { "itemIndicator": dragHandle, "itemCoordinate": mapCircle.center })
+                calcRadiusDragCoord()
+                radiusDragHandle = dragHandleComponent.createObject(mapControl)
+                radiusDragHandle.coordinate = Qt.binding(function() { return radiusDragCoord })
+                mapControl.addMapItem(radiusDragHandle)
+                radiusDragArea = radiusDragAreaComponent.createObject(mapControl, { "itemIndicator": radiusDragHandle, "itemCoordinate": radiusDragCoord })
+                centerDragHandle = dragHandleComponent.createObject(mapControl)
+                centerDragHandle.coordinate = Qt.binding(function() { return circleCenterCoord })
+                mapControl.addMapItem(centerDragHandle)
+                centerDragArea = centerDragAreaComponent.createObject(mapControl, { "itemIndicator": centerDragHandle, "itemCoordinate": circleCenterCoord })
             }
 
             Component.onDestruction: {
-                dragHandle.destroy()
-                dragArea.destroy()
+                centerDragHandle.destroy()
+                centerDragArea.destroy()
+                radiusDragHandle.destroy()
+                radiusDragArea.destroy()
             }
         }
     }

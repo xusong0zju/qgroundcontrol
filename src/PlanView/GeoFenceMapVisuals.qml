@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -20,6 +20,7 @@ import QGroundControl.FlightMap     1.0
 
 /// GeoFence map visuals
 Item {
+    id: _root
     z: QGroundControl.zOrderMapItems
 
     property var    map
@@ -29,9 +30,17 @@ Item {
     property var    homePosition
 
     property var    _breachReturnPointComponent
-    property var    _mouseAreaComponent
+    property var    _breachReturnDragComponent
+    property var    _paramCircleFenceComponent
     property var    _polygons:                  myGeoFenceController.polygons
     property var    _circles:                   myGeoFenceController.circles
+    property color  _borderColor:               "orange"
+    property int    _borderWidthInclusion:      2
+    property int    _borderWidthExclusion:      0
+    property color  _interiorColorExclusion:    "orange"
+    property color  _interiorColorInclusion:    "transparent"
+    property real   _interiorOpacityExclusion:  0.2
+    property real   _interiorOpacityInclusion:  1
 
     function addPolygon(inclusionPolygon) {
         // Initial polygon is inset to take 2/3rds space
@@ -69,35 +78,32 @@ Item {
     Component.onCompleted: {
         _breachReturnPointComponent = breachReturnPointComponent.createObject(map)
         map.addMapItem(_breachReturnPointComponent)
-        _mouseAreaComponent = mouseAreaComponent.createObject(map)
+        _breachReturnDragComponent = breachReturnDragComponent.createObject(map, { "itemIndicator": _breachReturnPointComponent })
+        _paramCircleFenceComponent = paramCircleFenceComponent.createObject(map)
+        map.addMapItem(_paramCircleFenceComponent)
     }
 
     Component.onDestruction: {
         _breachReturnPointComponent.destroy()
-        _mouseAreaComponent.destroy()
+        _breachReturnDragComponent.destroy()
+        _paramCircleFenceComponent.destroy()
     }
 
-    // Mouse area to capture breach return point coordinate
-    Component {
-        id: mouseAreaComponent
-
-        MouseArea {
-            anchors.fill:   map
-            visible:        interactive
-            onClicked:      myGeoFenceController.breachReturnPoint = map.toCoordinate(Qt.point(mouse.x, mouse.y), false /* clipToViewPort */)
-        }
-    }
-
+    // By default the parent for Instantiator.delegate item is the Instatiator itself. By there is a bug
+    // in Qt which will cause a crash if this delete item has Menu item within it. Since the Menu item
+    // doesn't like having a non-visual item as parent. This is likely related to hybrid QQuickWidtget+QML
+    // Hence Qt folks are going to care. In order to workaround you have to parent the item to _root Item instead.
     Instantiator {
         model: _polygons
 
         delegate : QGCMapPolygonVisuals {
+            parent:             _root
             mapControl:         map
             mapPolygon:         object
-            borderWidth:        object.inclusion ? 2 : 0
-            borderColor:        "orange"
-            interiorColor:      object.inclusion ? "transparent" : "orange"
-            interiorOpacity:    object.inclusion ? 1: 0.2
+            borderWidth:        object.inclusion ? _borderWidthInclusion : _borderWidthExclusion
+            borderColor:        _borderColor
+            interiorColor:      object.inclusion ? _interiorColorInclusion : _interiorColorExclusion
+            interiorOpacity:    object.inclusion ? _interiorOpacityInclusion : _interiorOpacityExclusion
         }
     }
 
@@ -105,14 +111,47 @@ Item {
         model: _circles
 
         delegate : QGCMapCircleVisuals {
+            parent:             _root
             mapControl:         map
             mapCircle:          object
-            borderWidth:        object.inclusion ? 2 : 0
-            borderColor:        "orange"
-            interiorColor:      object.inclusion ? "transparent" : "orange"
-            interiorOpacity:    object.inclusion ? 1: 0.2
+            borderWidth:        object.inclusion ? _borderWidthInclusion : _borderWidthExclusion
+            borderColor:        _borderColor
+            interiorColor:      object.inclusion ? _interiorColorInclusion : _interiorColorExclusion
+            interiorOpacity:    object.inclusion ? _interiorOpacityInclusion : _interiorOpacityExclusion
         }
     }
+
+    // Circular geofence specified from parameter
+    Component {
+        id: paramCircleFenceComponent
+
+        MapCircle {
+            color:          _interiorColorInclusion
+            opacity:        _interiorOpacityInclusion
+            border.color:   _borderColor
+            border.width:   _borderWidthInclusion
+            center:         homePosition
+            radius:         _radius
+            visible:        homePosition.isValid && _radius > 0
+
+            property real _radius: myGeoFenceController.paramCircularFence
+
+            on_RadiusChanged: console.log("_radius", _radius, homePosition.isValid, homePosition)
+        }
+    }
+
+    Component {
+        id: breachReturnDragComponent
+
+        MissionItemIndicatorDrag {
+            mapControl:     map
+            itemCoordinate: myGeoFenceController.breachReturnPoint
+            //visible:        itemCoordinate.isValid
+
+            onItemCoordinateChanged: myGeoFenceController.breachReturnPoint = itemCoordinate
+        }
+    }
+
 
     // Breach return point
     Component {
@@ -125,7 +164,8 @@ Item {
             coordinate:     myGeoFenceController.breachReturnPoint
 
             sourceItem: MissionItemIndexLabel {
-                label: "B"
+                label:      qsTr("B", "Breach Return Point item indicator")
+                checked:    true
             }
         }
     }

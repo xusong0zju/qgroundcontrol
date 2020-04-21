@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -15,6 +15,8 @@
 #include "SimpleMissionItem.h"
 
 #include <QGeoCoordinate>
+
+class PlanMasterController;
 
 /// Unit test for SimpleMissionItem
 class VisualMissionItemTest : public UnitTest
@@ -49,6 +51,7 @@ protected:
         specifiesAltitudeOnlyChangedIndex,
         specifiedFlightSpeedChangedIndex,
         specifiedGimbalYawChangedIndex,
+        specifiedGimbalPitchChangedIndex,
         lastSequenceNumberChangedIndex,
         missionGimbalYawChangedIndex,
         missionVehicleYawChangedIndex,
@@ -77,6 +80,7 @@ protected:
         specifiesAltitudeOnlyChangedMask =              1 << specifiesAltitudeOnlyChangedIndex,
         specifiedFlightSpeedChangedMask =               1 << specifiedFlightSpeedChangedIndex,
         specifiedGimbalYawChangedMask =                 1 << specifiedGimbalYawChangedIndex,
+        specifiedGimbalPitchChangedMask =               1 << specifiedGimbalPitchChangedIndex,
         lastSequenceNumberChangedMask =                 1 << lastSequenceNumberChangedIndex,
         missionGimbalYawChangedMask =                   1 << missionGimbalYawChangedIndex,
         missionVehicleYawChangedMask =                  1 << missionVehicleYawChangedIndex,
@@ -88,5 +92,6 @@ protected:
     static const size_t cVisualItemSignals = maxSignalIndex;
     const char*         rgVisualItemSignals[cVisualItemSignals];
 
-    Vehicle*        _offlineVehicle;
+    PlanMasterController*   _masterController =     nullptr;
+    Vehicle*                _controllerVehicle =    nullptr;
 };

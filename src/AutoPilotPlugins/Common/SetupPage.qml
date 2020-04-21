@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -10,6 +10,7 @@
 import QtQuick          2.3
 import QtQuick.Controls 1.2
 import QtQuick.Dialogs  1.2
+import QtQuick.Layouts  1.2
 
 import QGroundControl               1.0
 import QGroundControl.FactSystem    1.0
@@ -20,98 +21,83 @@ import QGroundControl.ScreenTools   1.0
 import QGroundControl.Controllers   1.0
 
 /// Base view control for all Setup pages
-QGCView {
-    id:         setupView
-    viewPanel:  setupPanel
+Item {
+    id:             setupView
+    enabled:        !_disableDueToArmed && !_disableDueToFlying
 
-    property alias  pageComponent:      pageLoader.sourceComponent
-    property string pageName:           vehicleComponent ? vehicleComponent.name : ""
-    property string pageDescription:    vehicleComponent ? vehicleComponent.description : ""
-    property real   availableWidth:     width - pageLoader.x
-    property real   availableHeight:    height - pageLoader.y
+    property alias  pageComponent:          pageLoader.sourceComponent
+    property string pageName:               vehicleComponent ? vehicleComponent.name : ""
+    property string pageDescription:        vehicleComponent ? vehicleComponent.description : ""
+    property real   availableWidth:         width - pageLoader.x
+    property real   availableHeight:        height - pageLoader.y
+    property bool   showAdvanced:           false
+    property alias  advanced:               advancedCheckBox.checked
 
-    property real _margins: ScreenTools.defaultFontPixelHeight / 2
+    property bool   _vehicleIsRover:        activeVehicle ? activeVehicle.rover : false
+    property bool   _vehicleArmed:          activeVehicle ? activeVehicle.armed : false
+    property bool   _vehicleFlying:         activeVehicle ? activeVehicle.flying : false
+    property bool   _disableDueToArmed:     vehicleComponent ? (!vehicleComponent.allowSetupWhileArmed && _vehicleArmed) : false
+    // FIXME: The _vehicleIsRover checkl is a hack to work around https://github.com/PX4/Firmware/issues/10969
+    property bool   _disableDueToFlying:    vehicleComponent ? (!_vehicleIsRover && !vehicleComponent.allowSetupWhileFlying && _vehicleFlying) : false
+    property string _disableReason:         _disableDueToArmed ? qsTr("armed") : qsTr("flying")
+    property real   _margins:               ScreenTools.defaultFontPixelHeight * 0.5
+    property string _pageTitle:             qsTr("%1 Setup").arg(pageName)
 
-    property bool visibleWhileArmed: false
-
-    property bool vehicleArmed: QGroundControl.multiVehicleManager.activeVehicle ? QGroundControl.multiVehicleManager.activeVehicle.armed : false
-
-    onVehicleArmedChanged: {
-        if (visibleWhileArmed) {
-            return
-        }
-
-        if (vehicleArmed) {
-            disabledWhileArmed.visible = true
-            setupView.viewPanel.enabled = false
-        } else {
-            disabledWhileArmed.visible = false
-            setupView.viewPanel.enabled = true
+    Component.onCompleted: {
+        if(pageLoader.item && pageLoader.item.setupPageCompleted) {
+            pageLoader.item.setupPageCompleted()
         }
     }
 
-    QGCPalette { id: qgcPal; colorGroupEnabled: setupPanel.enabled }
-
-    // Overlay to display when vehicle is armed and the setup page needs
-    // to be disabled
-    Item {
-        id: disabledWhileArmed
-        visible: false
-        z: 9999
-        anchors.fill: parent
-        Rectangle {
-            anchors.fill: parent
-            color: "black"
-            opacity: 0.5
-        }
-
-        QGCLabel {
-            anchors.margins:        defaultTextWidth * 2
-            anchors.fill:           parent
-            verticalAlignment:      Text.AlignVCenter
-            horizontalAlignment:    Text.AlignHCenter
-            wrapMode:               Text.WordWrap
-            font.pointSize:         ScreenTools.largeFontPointSize
-            color:                  "red"
-            text:                   "Setup disabled while the vehicle is armed"
-        }
-    }
-
-    QGCViewPanel {
-        id:             setupPanel
+    QGCFlickable {
         anchors.fill:   parent
+        contentWidth:   Math.max(availableWidth, pageLoader.x + pageLoader.item.width)
+        contentHeight:  Math.max(availableHeight, pageLoader.y + pageLoader.item.height)
+        clip:           true
 
-        QGCFlickable {
-            anchors.fill:   parent
-            contentWidth:   pageLoader.x + pageLoader.item.width
-            contentHeight:  pageLoader.y + pageLoader.item.height
-            clip:           true
+        RowLayout {
+            id:                 headingRow
+            width:              availableWidth
+            spacing:            _margins
+            layoutDirection:    Qt.RightToLeft
 
-            Column {
-                id:             headingColumn
-                width:          setupPanel.width
-                spacing:        _margins
+            QGCCheckBox {
+                id:         advancedCheckBox
+                text:       qsTr("Advanced")
+                visible:    showAdvanced
+            }
+
+            ColumnLayout {
+                spacing:            _margins
+                Layout.fillWidth:   true
 
                 QGCLabel {
-                    font.pointSize: ScreenTools.largeFontPointSize
-                    text:           pageName + " " + qsTr("Setup")
-                    visible:        !ScreenTools.isShortScreen
+                    Layout.fillWidth:   true
+                    font.pointSize:     ScreenTools.largeFontPointSize
+                    text:               !setupView.enabled ? _pageTitle + "<font color=\"red\">" + qsTr(" (Disabled while the vehicle is %1)").arg(_disableReason) + "</font>" : _pageTitle
+                    visible:            !ScreenTools.isShortScreen
                 }
 
                 QGCLabel {
-                    anchors.left:   parent.left
-                    anchors.right:  parent.right
-                    wrapMode:       Text.WordWrap
-                    text:           pageDescription
-                    visible:        !ScreenTools.isShortScreen
+                    Layout.fillWidth:   true
+                    wrapMode:           Text.WordWrap
+                    text:               pageDescription
+                    visible:            pageDescription !== "" && !ScreenTools.isShortScreen
                 }
             }
-
-            Loader {
-                id:                 pageLoader
-                anchors.topMargin:  _margins
-                anchors.top:        headingColumn.bottom
-            }
+        }
+        Loader {
+            id:                 pageLoader
+            anchors.topMargin:  _margins
+            anchors.top:        headingRow.bottom
+        }
+        // Overlay to display when vehicle is armed and this setup page needs
+        // to be disabled
+        Rectangle {
+            visible:            !setupView.enabled
+            anchors.fill:       parent
+            color:              "black"
+            opacity:            0.5
         }
     }
 }

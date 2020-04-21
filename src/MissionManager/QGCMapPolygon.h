@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -16,6 +16,7 @@
 #include <QPolygon>
 
 #include "QmlObjectListModel.h"
+#include "KMLDomDocument.h"
 
 /// The QGCMapPolygon class provides a polygon which can be displayed on a map using a map visuals control.
 /// It maintains a representation of the polygon on QVariantList and QmlObjectListModel format.
@@ -24,8 +25,8 @@ class QGCMapPolygon : public QObject
     Q_OBJECT
 
 public:
-    QGCMapPolygon(QObject* parent = NULL);
-    QGCMapPolygon(const QGCMapPolygon& other, QObject* parent = NULL);
+    QGCMapPolygon(QObject* parent = nullptr);
+    QGCMapPolygon(const QGCMapPolygon& other, QObject* parent = nullptr);
 
     const QGCMapPolygon& operator=(const QGCMapPolygon& other);
 
@@ -36,10 +37,14 @@ public:
     Q_PROPERTY(QGeoCoordinate       center      READ center         WRITE setCenter         NOTIFY centerChanged)
     Q_PROPERTY(bool                 centerDrag  READ centerDrag     WRITE setCenterDrag     NOTIFY centerDragChanged)
     Q_PROPERTY(bool                 interactive READ interactive    WRITE setInteractive    NOTIFY interactiveChanged)
+    Q_PROPERTY(bool                 isValid     READ isValid                                NOTIFY isValidChanged)
+    Q_PROPERTY(bool                 empty       READ empty                                  NOTIFY isEmptyChanged)
+    Q_PROPERTY(bool                 traceMode   READ traceMode      WRITE setTraceMode      NOTIFY traceModeChanged)
 
     Q_INVOKABLE void clear(void);
     Q_INVOKABLE void appendVertex(const QGeoCoordinate& coordinate);
     Q_INVOKABLE void removeVertex(int vertexIndex);
+    Q_INVOKABLE void appendVertices(const QList<QGeoCoordinate>& coordinates);
 
     /// Adjust the value for the specified coordinate
     ///     @param vertexIndex Polygon point index to modify (0-based)
@@ -52,11 +57,24 @@ public:
     /// Returns true if the specified coordinate is within the polygon
     Q_INVOKABLE bool containsCoordinate(const QGeoCoordinate& coordinate) const;
 
+    /// Offsets the current polygon edges by the specified distance in meters
+    Q_INVOKABLE void offset(double distance);
+
+    /// Loads a polygon from a KML/SH{ file
+    /// @return true: success
+    Q_INVOKABLE bool loadKMLOrSHPFile(const QString& file);
+
     /// Returns the path in a list of QGeoCoordinate's format
     QList<QGeoCoordinate> coordinateList(void) const;
 
     /// Returns the QGeoCoordinate for the vertex specified
-    QGeoCoordinate vertexCoordinate(int vertex) const;
+    Q_INVOKABLE QGeoCoordinate vertexCoordinate(int vertex) const;
+
+    /// Adjust polygon winding order to be clockwise (if needed)
+    Q_INVOKABLE void verifyClockwiseWinding(void);
+
+    Q_INVOKABLE void beginReset (void);
+    Q_INVOKABLE void endReset   (void);
 
     /// Saves the polygon to the json object.
     ///     @param json Json object to save to
@@ -69,6 +87,14 @@ public:
     /// @return true: success, false: failure (errorString set)
     bool loadFromJson(const QJsonObject& json, bool required, QString& errorString);
 
+    /// Convert polygon to NED and return (D is ignored)
+    QList<QPointF> nedPolygon(void) const;
+
+    /// Returns the area of the polygon in meters squared
+    double area(void) const;
+
+    QDomElement kmlPolygonElement(KMLDomDocument& domDocument);
+
     // Property methods
 
     int             count       (void) const { return _polygonPath.count(); }
@@ -77,6 +103,9 @@ public:
     QGeoCoordinate  center      (void) const { return _center; }
     bool            centerDrag  (void) const { return _centerDrag; }
     bool            interactive (void) const { return _interactive; }
+    bool            isValid     (void) const { return _polygonModel.count() >= 3; }
+    bool            empty       (void) const { return _polygonModel.count() == 0; }
+    bool            traceMode   (void) const { return _traceMode; }
 
     QVariantList        path        (void) const { return _polygonPath; }
     QmlObjectListModel* qmlPathModel(void) { return &_polygonModel; }
@@ -87,6 +116,7 @@ public:
     void setCenter      (QGeoCoordinate newCenter);
     void setCenterDrag  (bool centerDrag);
     void setInteractive (bool interactive);
+    void setTraceMode   (bool traceMode);
 
     static const char* jsonPolygonKey;
 
@@ -98,6 +128,9 @@ signals:
     void centerChanged      (QGeoCoordinate center);
     void centerDragChanged  (bool centerDrag);
     void interactiveChanged (bool interactive);
+    bool isValidChanged     (void);
+    bool isEmptyChanged     (void);
+    void traceModeChanged   (bool traceMode);
 
 private slots:
     void _polygonModelCountChanged(int count);
@@ -105,10 +138,12 @@ private slots:
     void _updateCenter(void);
 
 private:
-    void _init(void);
-    QPolygonF _toPolygonF(void) const;
-    QGeoCoordinate _coordFromPointF(const QPointF& point) const;
-    QPointF _pointFFromCoord(const QGeoCoordinate& coordinate) const;
+    void            _init                   (void);
+    QPolygonF       _toPolygonF             (void) const;
+    QGeoCoordinate  _coordFromPointF        (const QPointF& point) const;
+    QPointF         _pointFFromCoord        (const QGeoCoordinate& coordinate) const;
+    void            _beginResetIfNotActive  (void);
+    void            _endResetIfNotActive    (void);
 
     QVariantList        _polygonPath;
     QmlObjectListModel  _polygonModel;
@@ -117,6 +152,8 @@ private:
     bool                _centerDrag;
     bool                _ignoreCenterUpdates;
     bool                _interactive;
+    bool                _resetActive;
+    bool                _traceMode = false;
 };
 
 #endif

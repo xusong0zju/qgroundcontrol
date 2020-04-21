@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -8,11 +8,12 @@
  ****************************************************************************/
 
 #include "SpeedSectionTest.h"
+#include "PlanMasterController.h"
 
 SpeedSectionTest::SpeedSectionTest(void)
-    : _spySpeed(NULL)
-    , _spySection(NULL)
-    , _speedSection(NULL)
+    : _spySpeed(nullptr)
+    , _spySection(nullptr)
+    , _speedSection(nullptr)
 {
     
 }
@@ -39,7 +40,7 @@ void SpeedSectionTest::cleanup(void)
 
 void SpeedSectionTest::_createSpy(SpeedSection* speedSection, MultiSignalSpy** speedSpy)
 {
-    *speedSpy = NULL;
+    *speedSpy = nullptr;
     MultiSignalSpy* spy = new MultiSignalSpy();
     QCOMPARE(spy->init(speedSection, rgSpeedSignals, cSpeedSignals), true);
     *speedSpy = spy;
@@ -73,7 +74,18 @@ void SpeedSectionTest::_testDirty(void)
     QCOMPARE(_speedSection->dirty(), false);
     _spySection->clearAllSignals();
 
-    // Check the remaining items that should set dirty bit
+    // Flight speed change should only signal if specifyFlightSpeed is set
+
+    _speedSection->setSpecifyFlightSpeed(false);
+    _speedSection->setDirty(false);
+    _spySection->clearAllSignals();
+    _speedSection->flightSpeed()->setRawValue(_speedSection->flightSpeed()->rawValue().toDouble() + 1);
+    QVERIFY(_spySection->checkNoSignalByMask(dirtyChangedMask));
+    QCOMPARE(_speedSection->dirty(), false);
+
+    _speedSection->setSpecifyFlightSpeed(true);
+    _speedSection->setDirty(false);
+    _spySection->clearAllSignals();
     _speedSection->flightSpeed()->setRawValue(_speedSection->flightSpeed()->rawValue().toDouble() + 1);
     QVERIFY(_spySection->checkSignalByMask(dirtyChangedMask));
     QCOMPARE(_spySection->pullBoolFromSignalIndex(dirtyChangedIndex), true);
@@ -123,7 +135,7 @@ void SpeedSectionTest::_checkAvailable(void)
                             70.1234567,
                             true,           // autoContinue
                             false);         // isCurrentItem
-    SimpleMissionItem* item = new SimpleMissionItem(_offlineVehicle, missionItem);
+    SimpleMissionItem* item = new SimpleMissionItem(_masterController, false /* flyView */, missionItem, this);
     QVERIFY(item->speedSection());
     QCOMPARE(item->speedSection()->available(), false);
 }
@@ -165,7 +177,7 @@ void SpeedSectionTest::_testAppendSectionItems(void)
     _speedSection->appendSectionItems(rgMissionItems, this, seqNum);
     QCOMPARE(rgMissionItems.count(), 1);
     QCOMPARE(seqNum, 1);
-    MissionItem expectedSpeedItem(0, MAV_CMD_DO_CHANGE_SPEED, MAV_FRAME_MISSION, _offlineVehicle->multiRotor() ? 1 : 0, _speedSection->flightSpeed()->rawValue().toDouble(), -1, 0, 0, 0, 0, true, false);
+    MissionItem expectedSpeedItem(0, MAV_CMD_DO_CHANGE_SPEED, MAV_FRAME_MISSION, _controllerVehicle->multiRotor() ? 1 : 0, _speedSection->flightSpeed()->rawValue().toDouble(), -1, 0, 0, 0, 0, true, false);
     _missionItemsEqual(*rgMissionItems[0], expectedSpeedItem);
 }
 
@@ -181,8 +193,8 @@ void SpeedSectionTest::_testScanForSection(void)
     // Check for a scan success
 
     double flightSpeed = 10.123456;
-    MissionItem validSpeedItem(0, MAV_CMD_DO_CHANGE_SPEED, MAV_FRAME_MISSION, _offlineVehicle->multiRotor() ? 1 : 0, flightSpeed, -1, 0, 0, 0, 0, true, false);
-    SimpleMissionItem simpleItem(_offlineVehicle, validSpeedItem);
+    MissionItem validSpeedItem(0, MAV_CMD_DO_CHANGE_SPEED, MAV_FRAME_MISSION, _controllerVehicle->multiRotor() ? 1 : 0, flightSpeed, -1, 0, 0, 0, 0, true, false);
+    SimpleMissionItem simpleItem(_masterController, false /* flyView */, validSpeedItem, nullptr);
     MissionItem& simpleMissionItem = simpleItem.missionItem();
     visualItems.append(&simpleItem);
     scanIndex = 0;
@@ -198,7 +210,7 @@ void SpeedSectionTest::_testScanForSection(void)
     // Flight speed command but incorrect settings
 
     simpleMissionItem = validSpeedItem;
-    simpleMissionItem.setParam1(_offlineVehicle->multiRotor() ? 0 : 1);
+    simpleMissionItem.setParam1(_controllerVehicle->multiRotor() ? 0 : 1);
     visualItems.append(&simpleItem);
     QCOMPARE(_speedSection->scanForSection(&visualItems, scanIndex), false);
     QCOMPARE(visualItems.count(), 1);
@@ -252,9 +264,8 @@ void SpeedSectionTest::_testScanForSection(void)
     scanIndex = 0;
 
     // Valid item in wrong position
-    QmlObjectListModel waypointVisualItems;
     MissionItem waypointMissionItem(0, MAV_CMD_NAV_WAYPOINT, MAV_FRAME_GLOBAL_RELATIVE_ALT, 0, 0, 0, 0, 0, 0, 0, true, false);
-    SimpleMissionItem simpleWaypointItem(_offlineVehicle, waypointMissionItem);
+    SimpleMissionItem simpleWaypointItem(_masterController, false /* flyView */, waypointMissionItem, nullptr);
     simpleMissionItem = validSpeedItem;
     visualItems.append(&simpleWaypointItem);
     visualItems.append(&simpleMissionItem);
@@ -263,4 +274,19 @@ void SpeedSectionTest::_testScanForSection(void)
     QCOMPARE(_speedSection->settingsSpecified(), false);
     visualItems.clear();
     scanIndex = 0;
+}
+
+void SpeedSectionTest::_testSpecifiedFlightSpeedChanged(void)
+{
+    // specifiedFlightSpeedChanged SHOULD NOT signal if flight speed is changed when specifyFlightSpeed IS NOT set
+    _speedSection->setSpecifyFlightSpeed(false);
+    _spySpeed->clearAllSignals();
+    _speedSection->flightSpeed()->setRawValue(_speedSection->flightSpeed()->rawValue().toDouble() + 1);
+    QVERIFY(_spySpeed->checkNoSignalByMask(specifiedFlightSpeedChangedMask));
+
+    // specifiedFlightSpeedChanged SHOULD signal if flight speed is changed when specifyFlightSpeed IS set
+    _speedSection->setSpecifyFlightSpeed(true);
+    _spySpeed->clearAllSignals();
+    _speedSection->flightSpeed()->setRawValue(_speedSection->flightSpeed()->rawValue().toDouble() + 1);
+    QVERIFY(_spySpeed->checkSignalByMask(specifiedFlightSpeedChangedMask));
 }

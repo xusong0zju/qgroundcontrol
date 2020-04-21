@@ -33,25 +33,31 @@ class APMSubmarineFactGroup : public FactGroup
     Q_OBJECT
 
 public:
-    APMSubmarineFactGroup(QObject* parent = NULL);
+    APMSubmarineFactGroup(QObject* parent = nullptr);
 
-    Q_PROPERTY(Fact* camTilt       READ camTilt       CONSTANT)
-    Q_PROPERTY(Fact* tetherTurns   READ tetherTurns   CONSTANT)
-    Q_PROPERTY(Fact* lightsLevel1  READ lightsLevel1  CONSTANT)
-    Q_PROPERTY(Fact* lightsLevel2  READ lightsLevel2  CONSTANT)
-    Q_PROPERTY(Fact* pilotGain     READ pilotGain     CONSTANT)
+    Q_PROPERTY(Fact* camTilt             READ camTilt             CONSTANT)
+    Q_PROPERTY(Fact* tetherTurns         READ tetherTurns         CONSTANT)
+    Q_PROPERTY(Fact* lightsLevel1        READ lightsLevel1        CONSTANT)
+    Q_PROPERTY(Fact* lightsLevel2        READ lightsLevel2        CONSTANT)
+    Q_PROPERTY(Fact* pilotGain           READ pilotGain           CONSTANT)
+    Q_PROPERTY(Fact* inputHold           READ inputHold     CONSTANT)
+    Q_PROPERTY(Fact* rangefinderDistance READ rangefinderDistance CONSTANT)
 
-    Fact* camTilt       (void) { return &_camTiltFact; }
-    Fact* tetherTurns   (void) { return &_tetherTurnsFact; }
-    Fact* lightsLevel1  (void) { return &_lightsLevel1Fact; }
-    Fact* lightsLevel2  (void) { return &_lightsLevel2Fact; }
-    Fact* pilotGain     (void) { return &_pilotGainFact; }
+    Fact* camTilt             (void) { return &_camTiltFact; }
+    Fact* tetherTurns         (void) { return &_tetherTurnsFact; }
+    Fact* lightsLevel1        (void) { return &_lightsLevel1Fact; }
+    Fact* lightsLevel2        (void) { return &_lightsLevel2Fact; }
+    Fact* pilotGain           (void) { return &_pilotGainFact; }
+    Fact* inputHold           (void) { return &_inputHoldFact; }
+    Fact* rangefinderDistance (void) { return &_rangefinderDistanceFact; }
 
     static const char* _camTiltFactName;
     static const char* _tetherTurnsFactName;
     static const char* _lightsLevel1FactName;
     static const char* _lightsLevel2FactName;
     static const char* _pilotGainFactName;
+    static const char* _inputHoldFactName;
+    static const char* _rangefinderDistanceFactName;
 
     static const char* _settingsGroup;
 
@@ -61,6 +67,8 @@ private:
     Fact            _lightsLevel1Fact;
     Fact            _lightsLevel2Fact;
     Fact            _pilotGainFact;
+    Fact            _inputHoldFact;
+    Fact            _rangefinderDistanceFact;
 };
 
 class APMSubMode : public APMCustomMode
@@ -86,9 +94,9 @@ public:
         POSHOLD           = 16,  // Hold position
         RESERVED_17       = 17,
         RESERVED_18       = 18,
-        MANUAL            = 19
+        MANUAL            = 19,
+        MOTORDETECTION    = 20,
     };
-    static const int modeCount = 20;
 
     APMSubMode(uint32_t mode, bool settable);
 };
@@ -100,10 +108,13 @@ class ArduSubFirmwarePlugin : public APMFirmwarePlugin
 public:
     ArduSubFirmwarePlugin(void);
 
-    // Overrides from FirmwarePlugin
-    int manualControlReservedButtonCount(void) final;
+    QList<MAV_CMD> supportedMissionCommands(void) final;
 
     int defaultJoystickTXMode(void) final { return 3; }
+
+    void initializeStreamRates(Vehicle* vehicle) override final;
+
+    bool isCapable(const Vehicle *vehicle, FirmwareCapabilities capabilities) final;
 
     bool supportsThrottleModeCenterZero(void) final;
 
@@ -126,11 +137,13 @@ public:
     const QVariantList& toolBarIndicators(const Vehicle* vehicle) final;
     bool  adjustIncomingMavlinkMessage(Vehicle* vehicle, mavlink_message_t* message) final;
     virtual QMap<QString, FactGroup*>* factGroups(void) final;
+    void adjustMetaData(MAV_TYPE vehicleType, FactMetaData* metaData) override final;
 
 
 private:
     QVariantList _toolBarIndicators;
     static bool _remapParamNameIntialized;
+    QMap<QString, QString> _factRenameMap;
     static FirmwarePlugin::remapParamNameMajorVersionMap_t  _remapParamName;
     void _handleNamedValueFloat(mavlink_message_t* message);
     void _handleMavlinkMessage(mavlink_message_t* message);

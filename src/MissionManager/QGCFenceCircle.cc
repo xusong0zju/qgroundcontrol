@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -20,7 +20,7 @@ QGCFenceCircle::QGCFenceCircle(QObject* parent)
 }
 
 QGCFenceCircle::QGCFenceCircle(const QGeoCoordinate& center, double radius, bool inclusion, QObject* parent)
-    : QGCMapCircle  (center, radius, parent)
+    : QGCMapCircle  (center, radius, false /* showRotation */, true /* clockwiseRotation */, parent)
     , _inclusion    (inclusion)
 {
     _init();
@@ -54,23 +54,29 @@ void QGCFenceCircle::_setDirty(void)
 
 void QGCFenceCircle::saveToJson(QJsonObject& json)
 {
-    QGCMapCircle::saveToJson(json);
-
+    json[JsonHelper::jsonVersionKey] = _jsonCurrentVersion;
     json[_jsonInclusionKey] = _inclusion;
+    QGCMapCircle::saveToJson(json);
 }
 
 bool QGCFenceCircle::loadFromJson(const QJsonObject& json, QString& errorString)
 {
-    if (!QGCMapCircle::loadFromJson(json, errorString)) {
-        return false;
-    }
-
     errorString.clear();
 
     QList<JsonHelper::KeyValidateInfo> keyInfoList = {
-        { _jsonInclusionKey, QJsonValue::Bool, true },
+        { JsonHelper::jsonVersionKey,   QJsonValue::Double, true },
+        { _jsonInclusionKey,            QJsonValue::Bool,   true },
     };
     if (!JsonHelper::validateKeys(json, keyInfoList, errorString)) {
+        return false;
+    }
+
+    if (json[JsonHelper::jsonVersionKey].toInt() != _jsonCurrentVersion) {
+        errorString = tr("GeoFence Circle only supports version %1").arg(_jsonCurrentVersion);
+        return false;
+    }
+
+    if (!QGCMapCircle::loadFromJson(json, errorString)) {
         return false;
     }
 

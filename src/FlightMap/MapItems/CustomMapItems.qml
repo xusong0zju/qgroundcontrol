@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -29,9 +29,9 @@ Item {
 
             Component.onCompleted: {
                 var controlUrl = object.url
-                if (controlUrl != "") {
+                if (controlUrl !== "") {
                     var component = Qt.createComponent(controlUrl);
-                    if (component.status == Component.Ready) {
+                    if (component.status === Component.Ready) {
                         _customObject = component.createObject(map, { "customMapObject": object })
                         if (_customObject) {
                             map.addMapItem(_customObject)

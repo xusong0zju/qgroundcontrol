@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   (c) 2009-2016 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
+ * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
  *
  * QGroundControl is licensed according to the terms in the file
  * COPYING.md in the root of the source code directory.
@@ -10,6 +10,7 @@
 import QtQuick          2.3
 import QtQuick.Controls 1.2
 import QtQuick.Layouts  1.2
+import QtQuick.Dialogs  1.3
 
 import QGroundControl               1.0
 import QGroundControl.Controls      1.0
@@ -20,12 +21,16 @@ import QGroundControl.FactControls  1.0
 import QGroundControl.ScreenTools   1.0
 
 QGCViewDialog {
-    id: root
+    id:     root
+    focus:  true
 
     property Fact   fact
     property bool   showRCToParam:  false
     property bool   validate:       false
     property string validateValue
+    property bool   setFocus:       true    ///< true: focus is set to text field on display, false: focus not set (works around strange virtual keyboard bug with FactValueSlider
+
+    signal valueChanged
 
     property real   _editFieldWidth:            ScreenTools.defaultFontPixelWidth * 20
     property bool   _longDescriptionAvailable:  fact.longDescription != ""
@@ -33,7 +38,7 @@ QGCViewDialog {
     property bool   _allowForceSave:            QGroundControl.corePlugin.showAdvancedUI || !_editingParameter
     property bool   _allowDefaultReset:         fact.defaultValueAvailable && (QGroundControl.corePlugin.showAdvancedUI || !_editingParameter)
 
-    ParameterEditorController { id: controller; factPanel: parent }
+    ParameterEditorController { id: controller; }
 
     QGCPalette { id: qgcPal; colorGroupEnabled: true }
 
@@ -41,15 +46,18 @@ QGCViewDialog {
         if (bitmaskColumn.visible && !manualEntry.checked) {
             fact.value = bitmaskValue();
             fact.valueChanged(fact.value)
+            valueChanged()
             hideDialog();
         } else if (factCombo.visible && !manualEntry.checked) {
             fact.enumIndex = factCombo.currentIndex
+            valueChanged()
             hideDialog()
         } else {
             var errorString = fact.validate(valueField.text, forceSave.checked)
             if (errorString === "") {
                 fact.value = valueField.text
                 fact.valueChanged(fact.value)
+                valueChanged()
                 hideDialog()
             } else {
                 validationError.text = errorString
@@ -85,12 +93,8 @@ QGCViewDialog {
         }
     }
 
-	// set focus to the text field when becoming visible (in case of an Enum,
-	// the valueField is not visible, but it's not an issue because the combo
-	// box cannot have a focus)
-	onVisibleChanged: if (visible && !ScreenTools.isMobile) valueField.forceActiveFocus()
-
     QGCFlickable {
+        id:                 flickable
         anchors.fill:       parent
         contentHeight:      _column.y + _column.height
         flickableDirection: Flickable.VerticalFlick
@@ -109,26 +113,26 @@ QGCViewDialog {
             }
 
             RowLayout {
-                spacing:        defaultTextWidth
+                spacing:        ScreenTools.defaultFontPixelWidth
                 anchors.left:   parent.left
                 anchors.right:  parent.right
 
                 QGCTextField {
                     id:                 valueField
                     text:               validate ? validateValue : fact.valueString
-                    visible:            fact.enumStrings.length == 0 || validate || manualEntry.checked
+                    visible:            fact.enumStrings.length === 0 || validate || manualEntry.checked
                     unitsLabel:         fact.units
                     showUnits:          fact.units != ""
                     Layout.fillWidth:   true
-                    inputMethodHints:   ScreenTools.isiOS ?
-                                            Qt.ImhNone :                // iOS numeric keyboard has not done button, we can't use it
+                    focus:              setFocus
+                    inputMethodHints:   (fact.typeIsString || ScreenTools.isiOS) ?
+                                            Qt.ImhNone :                // iOS numeric keyboard has no done button, we can't use it
                                             Qt.ImhFormattedNumbersOnly  // Forces use of virtual numeric keyboard
                 }
 
                 QGCButton {
-                    anchors.baseline:   valueField.baseline
-                    visible:            _allowDefaultReset
-                    text:               qsTr("Reset to default")
+                    visible:    _allowDefaultReset
+                    text:       qsTr("Reset to default")
 
                     onClicked: {
                         fact.value = fact.defaultValue
@@ -145,7 +149,7 @@ QGCViewDialog {
                 visible:        _showCombo
                 model:          fact.enumStrings
 
-                property bool _showCombo: fact.enumStrings.length != 0 && fact.bitmaskStrings.length == 0 && !validate
+                property bool _showCombo: fact.enumStrings.length !== 0 && fact.bitmaskStrings.length === 0 && !validate
 
                 Component.onCompleted: {
                     // We can't bind directly to fact.enumIndex since that would add an unknown value
@@ -198,7 +202,7 @@ QGCViewDialog {
             }
 
             Row {
-                spacing: defaultTextWidth
+                spacing: ScreenTools.defaultFontPixelWidth
 
                 QGCLabel {
                     id:         minValueDisplay
@@ -223,8 +227,13 @@ QGCViewDialog {
             }
 
             QGCLabel {
-                visible:    fact.rebootRequired
-                text:       "Reboot required after change"
+                visible:    fact.vehicleRebootRequired
+                text:       "Vehicle reboot required after change"
+            }
+
+            QGCLabel {
+                visible:    fact.qgcRebootRequired
+                text:       "Application restart required after change"
             }
 
             QGCLabel {
@@ -278,11 +287,19 @@ QGCViewDialog {
             }
 
             QGCButton {
-                text:           qsTr("Set RC to Param...")
-                width:          _editFieldWidth
-                visible:        _advanced.checked && !validate && showRCToParam
-                onClicked:      controller.setRCToParam(fact.name)
+                text:       qsTr("Set RC to Param")
+                width:      _editFieldWidth
+                visible:    _advanced.checked && !validate && showRCToParam
+                onClicked:  mainWindow.showPopupDialog(rcToParamDialog)
             }
         } // Column
+    }
+
+    Component {
+        id: rcToParamDialog
+
+        RCToParamDialog {
+            tuningFact: fact
+        }
     }
 } // QGCViewDialog
